@@ -7,7 +7,12 @@ import os
 import seaborn as sns
 
 # -------------------------------
-# File paths (LOCAL for Streamlit Cloud)
+# Debug: Show files in directory
+# -------------------------------
+st.write("📁 Files available:", os.listdir())
+
+# -------------------------------
+# File paths (KEEP FILES IN SAME FOLDER)
 # -------------------------------
 MODEL_FILE = "youtube_model.pkl"
 DATA_FILE = "YouTube_Monetization_Modeler.csv"
@@ -15,26 +20,28 @@ DATA_FILE = "YouTube_Monetization_Modeler.csv"
 # -------------------------------
 # Load Model Safely
 # -------------------------------
-if os.path.exists(MODEL_FILE):
+try:
     model = joblib.load(MODEL_FILE)
-else:
-    st.error("❌ Model file not found. Please upload 'youtube_model.pkl' to your repo.")
+except Exception as e:
+    st.error(f"❌ Error loading model: {e}")
+    st.error("👉 Upload 'youtube_model.pkl' to your GitHub repo")
     st.stop()
 
 # -------------------------------
 # Load Dataset Safely
 # -------------------------------
-if os.path.exists(DATA_FILE):
+try:
     original_df = pd.read_csv(DATA_FILE)
-else:
+except:
     original_df = pd.DataFrame()
-    st.warning("⚠️ Dataset not found. Some visualizations will be disabled.")
+    st.warning("⚠️ Dataset not found. Visualizations disabled.")
 
 # -------------------------------
 # App Title
 # -------------------------------
 st.title("📹 YouTube Ad Revenue Predictor")
-st.write("Estimate your potential YouTube ad revenue using ML 📊")
+st.write("Estimate your potential YouTube ad revenue using Machine Learning 📊")
+st.write("🤖 Model Type: Regression Model")
 
 # -------------------------------
 # User Inputs
@@ -66,13 +73,13 @@ input_data = pd.DataFrame(
     ]
 )
 
-prediction = model.predict(input_data)[0]
-
-# -------------------------------
-# Output
-# -------------------------------
-st.success(f"💰 Estimated Ad Revenue: **${prediction:.2f} USD**")
-st.info("Prediction is based on engagement, audience, and content features using a trained ML model.")
+try:
+    prediction = model.predict(input_data)[0]
+    st.success(f"💰 Estimated Ad Revenue: **${prediction:.2f} USD**")
+    st.info("Prediction is based on engagement, audience, and content features using a trained ML model.")
+except Exception as e:
+    st.error(f"Prediction Error: {e}")
+    st.stop()
 
 # -------------------------------
 # Visualization: Prediction Context
@@ -87,7 +94,7 @@ if not original_df.empty and 'ad_revenue_usd' in original_df.columns:
     ax.legend()
     st.pyplot(fig)
 else:
-    st.warning("Dataset not available for visualization.")
+    st.warning("Dataset not available for this visualization.")
 
 # -------------------------------
 # Category Distribution
