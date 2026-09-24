@@ -2,9 +2,9 @@ import streamlit as st
 import pandas as pd
 import joblib
 import numpy as np
-import matplotlib.pyplot as plt
 import os
-import seaborn as sns
+import plotly.express as px
+import plotly.graph_objects as go
 
 # =========================================================
 # PAGE CONFIGURATION
@@ -21,62 +21,20 @@ st.set_page_config(
 # =========================================================
 
 MODEL_FILE = "youtube_model.pkl"
-
-# FIXED: This is the actual filename in your GitHub repository
 DATA_FILE = "youtube_ad_revenue_dataset.csv"
-
-# =========================================================
-# APP TITLE
-# =========================================================
-
-st.title("📹 YouTube Ad Revenue Predictor")
-
-st.write(
-    "Estimate your potential YouTube ad revenue using "
-    "Machine Learning 📊"
-)
-
-st.write("🤖 Model Type: Regression Model")
-
-# =========================================================
-# CHECK FILES
-# =========================================================
-
-with st.expander("📁 Application Files", expanded=False):
-
-    try:
-        files = os.listdir(".")
-        st.write(files)
-
-    except Exception as e:
-        st.error(f"Unable to list files: {e}")
-
-# =========================================================
-# CHECK MODEL
-# =========================================================
-
-if not os.path.exists(MODEL_FILE):
-
-    st.error(
-        f"❌ Model file not found: {MODEL_FILE}"
-    )
-
-    st.stop()
 
 # =========================================================
 # LOAD MODEL
 # =========================================================
 
+if not os.path.exists(MODEL_FILE):
+    st.error(f"❌ Model file not found: {MODEL_FILE}")
+    st.stop()
+
 try:
-
     model = joblib.load(MODEL_FILE)
-
 except Exception as e:
-
-    st.error(
-        f"❌ Error loading model: {e}"
-    )
-
+    st.error(f"❌ Error loading model: {e}")
     st.stop()
 
 # =========================================================
@@ -85,79 +43,195 @@ except Exception as e:
 
 original_df = pd.DataFrame()
 
-if os.path.exists(DATA_FILE):
+if not os.path.exists(DATA_FILE):
+    st.error(f"❌ Dataset file not found: {DATA_FILE}")
+    st.stop()
 
+try:
+    original_df = pd.read_csv(
+        DATA_FILE,
+        encoding="utf-8",
+        low_memory=False
+    )
+except UnicodeDecodeError:
     try:
-
-        file_size = (
-            os.path.getsize(DATA_FILE)
-            / (1024 * 1024)
-        )
-
-        st.success(
-            f"📄 Dataset found: {DATA_FILE} "
-            f"({file_size:.2f} MB)"
-        )
-
         original_df = pd.read_csv(
             DATA_FILE,
-            encoding="utf-8",
+            encoding="latin1",
             low_memory=False
         )
-
-        st.success(
-            f"✅ Dataset loaded successfully: "
-            f"{original_df.shape[0]:,} rows × "
-            f"{original_df.shape[1]} columns"
-        )
-
-    except UnicodeDecodeError:
-
-        try:
-
-            original_df = pd.read_csv(
-                DATA_FILE,
-                encoding="latin1",
-                low_memory=False
-            )
-
-            st.success(
-                f"✅ Dataset loaded successfully: "
-                f"{original_df.shape[0]:,} rows × "
-                f"{original_df.shape[1]} columns"
-            )
-
-        except Exception as e:
-
-            st.error(
-                f"❌ CSV reading error: {e}"
-            )
-
     except Exception as e:
+        st.error(f"❌ CSV reading error: {e}")
+        st.stop()
+except Exception as e:
+    st.error(f"❌ Error reading dataset: {e}")
+    st.stop()
 
-        st.error(
-            f"❌ Error reading dataset: {e}"
-        )
+# =========================================================
+# HEADER
+# =========================================================
 
-else:
+st.title("📹 YouTube Ad Revenue Predictor")
 
-    st.warning(
-        f"⚠️ Dataset file not found: {DATA_FILE}"
+st.markdown(
+    """
+    ### 🤖 Machine Learning Dashboard
+    Predict estimated YouTube ad revenue and explore
+    audience, engagement, category, device and revenue patterns.
+    """
+)
+
+st.success(
+    f"✅ Dataset loaded: {len(original_df):,} rows × "
+    f"{len(original_df.columns)} columns"
+)
+
+# =========================================================
+# SIDEBAR
+# =========================================================
+
+st.sidebar.header("🎛️ Dashboard Controls")
+
+# ---------------------------------------------------------
+# Dataset filters
+# ---------------------------------------------------------
+
+filtered_df = original_df.copy()
+
+if "category" in original_df.columns:
+
+    categories = sorted(
+        original_df["category"]
+        .dropna()
+        .astype(str)
+        .unique()
+        .tolist()
     )
 
+    selected_categories = st.sidebar.multiselect(
+        "🎮 Category",
+        categories,
+        default=categories
+    )
+
+    if selected_categories:
+        filtered_df = filtered_df[
+            filtered_df["category"].astype(str).isin(
+                selected_categories
+            )
+        ]
+
+if "country" in original_df.columns:
+
+    countries = sorted(
+        original_df["country"]
+        .dropna()
+        .astype(str)
+        .unique()
+        .tolist()
+    )
+
+    selected_countries = st.sidebar.multiselect(
+        "🌎 Country",
+        countries,
+        default=countries
+    )
+
+    if selected_countries:
+        filtered_df = filtered_df[
+            filtered_df["country"].astype(str).isin(
+                selected_countries
+            )
+        ]
+
+if "device" in original_df.columns:
+
+    devices = sorted(
+        original_df["device"]
+        .dropna()
+        .astype(str)
+        .unique()
+        .tolist()
+    )
+
+    selected_devices = st.sidebar.multiselect(
+        "📱 Device",
+        devices,
+        default=devices
+    )
+
+    if selected_devices:
+        filtered_df = filtered_df[
+            filtered_df["device"].astype(str).isin(
+                selected_devices
+            )
+        ]
+
 # =========================================================
-# USER INPUT SECTION
+# KPI SECTION
 # =========================================================
 
-st.header("🎯 Enter Video Details")
+st.header("📊 Dataset Overview")
 
-col1, col2, col3 = st.columns(3)
+k1, k2, k3, k4 = st.columns(4)
 
-# ---------------------------------------------------------
-# COLUMN 1
-# ---------------------------------------------------------
+with k1:
+    st.metric(
+        "🎬 Videos",
+        f"{len(filtered_df):,}"
+    )
 
-with col1:
+with k2:
+
+    if "views" in filtered_df.columns:
+        total_views = filtered_df["views"].sum()
+        st.metric(
+            "👁️ Total Views",
+            f"{total_views:,.0f}"
+        )
+    else:
+        st.metric("👁️ Total Views", "N/A")
+
+with k3:
+
+    if "ad_revenue_usd" in filtered_df.columns:
+
+        avg_revenue = (
+            filtered_df["ad_revenue_usd"]
+            .mean()
+        )
+
+        st.metric(
+            "💰 Avg Revenue",
+            f"${avg_revenue:,.2f}"
+        )
+
+    else:
+        st.metric("💰 Avg Revenue", "N/A")
+
+with k4:
+
+    if "likes" in filtered_df.columns:
+
+        total_likes = filtered_df["likes"].sum()
+
+        st.metric(
+            "👍 Total Likes",
+            f"{total_likes:,.0f}"
+        )
+
+    else:
+        st.metric("👍 Total Likes", "N/A")
+
+# =========================================================
+# PREDICTION SECTION
+# =========================================================
+
+st.header("🎯 Predict Your Video Revenue")
+
+p1, p2, p3 = st.columns(3)
+
+with p1:
 
     views = st.number_input(
         "👁️ Views",
@@ -180,16 +254,11 @@ with col1:
         step=10
     )
 
-# ---------------------------------------------------------
-# COLUMN 2
-# ---------------------------------------------------------
+with p2:
 
-with col2:
-
-    watch_time = st.slider(
+    watch_time = st.number_input(
         "⏱️ Watch Time (Minutes)",
-        min_value=10000.0,
-        max_value=70000.0,
+        min_value=0.0,
         value=37500.0,
         step=100.0
     )
@@ -208,15 +277,22 @@ with col2:
         step=1000
     )
 
-# ---------------------------------------------------------
-# COLUMN 3
-# ---------------------------------------------------------
+with p3:
 
-with col3:
+    # Use dataset categories when available
+    if "category" in original_df.columns:
 
-    cat = st.selectbox(
-        "🎮 Category",
-        [
+        prediction_categories = sorted(
+            original_df["category"]
+            .dropna()
+            .astype(str)
+            .unique()
+            .tolist()
+        )
+
+    else:
+
+        prediction_categories = [
             "Gaming",
             "Education",
             "Entertainment",
@@ -224,20 +300,48 @@ with col3:
             "Music",
             "Lifestyle"
         ]
+
+    cat = st.selectbox(
+        "🎮 Category",
+        prediction_categories
     )
 
-    dev = st.selectbox(
-        "📱 Device",
-        [
+    if "device" in original_df.columns:
+
+        prediction_devices = sorted(
+            original_df["device"]
+            .dropna()
+            .astype(str)
+            .unique()
+            .tolist()
+        )
+
+    else:
+
+        prediction_devices = [
             "Mobile",
             "Desktop",
             "Tablet"
         ]
+
+    dev = st.selectbox(
+        "📱 Device",
+        prediction_devices
     )
 
-    country = st.selectbox(
-        "🌎 Country",
-        [
+    if "country" in original_df.columns:
+
+        prediction_countries = sorted(
+            original_df["country"]
+            .dropna()
+            .astype(str)
+            .unique()
+            .tolist()
+        )
+
+    else:
+
+        prediction_countries = [
             "USA",
             "India",
             "UK",
@@ -246,6 +350,10 @@ with col3:
             "DE",
             "AU"
         ]
+
+    country = st.selectbox(
+        "🌎 Country",
+        prediction_countries
     )
 
 # =========================================================
@@ -259,16 +367,7 @@ engagement_rate = (
 )
 
 # =========================================================
-# SHOW ENGAGEMENT RATE
-# =========================================================
-
-st.metric(
-    "📈 Engagement Rate",
-    f"{engagement_rate:.2%}"
-)
-
-# =========================================================
-# CREATE INPUT DATA
+# MODEL INPUT
 # =========================================================
 
 input_data = pd.DataFrame(
@@ -302,19 +401,10 @@ input_data = pd.DataFrame(
 # PREDICTION
 # =========================================================
 
-st.header("💰 Revenue Prediction")
-
 try:
 
-    prediction = model.predict(input_data)[0]
-
-    st.success(
-        f"💰 Estimated Ad Revenue: **${prediction:.2f} USD**"
-    )
-
-    st.info(
-        "The prediction is generated using the trained "
-        "machine learning regression model."
+    prediction = float(
+        model.predict(input_data)[0]
     )
 
 except Exception as e:
@@ -326,284 +416,528 @@ except Exception as e:
     st.stop()
 
 # =========================================================
-# VISUALIZATION 1
-# REVENUE DISTRIBUTION
+# PREDICTION KPI CARDS
 # =========================================================
 
-st.header("📊 Revenue Analysis")
+st.subheader("💰 Prediction Result")
 
-if (
-    not original_df.empty
-    and "ad_revenue_usd" in original_df.columns
-):
+r1, r2, r3 = st.columns(3)
 
-    fig, ax = plt.subplots(
-        figsize=(10, 5)
+with r1:
+
+    st.metric(
+        "Estimated Revenue",
+        f"${prediction:,.2f}"
     )
 
-    revenue_data = (
+with r2:
+
+    st.metric(
+        "Engagement Rate",
+        f"{engagement_rate:.2%}"
+    )
+
+with r3:
+
+    if views > 0:
+
+        revenue_per_1000_views = (
+            prediction / views
+        ) * 1000
+
+        st.metric(
+            "Estimated Revenue / 1K Views",
+            f"${revenue_per_1000_views:.2f}"
+        )
+
+# =========================================================
+# REVENUE GAUGE
+# =========================================================
+
+st.subheader("🎯 Predicted Revenue Gauge")
+
+if "ad_revenue_usd" in original_df.columns:
+
+    max_revenue = float(
         original_df["ad_revenue_usd"]
         .dropna()
+        .quantile(0.99)
     )
 
-    ax.hist(
-        revenue_data,
-        bins=50
-    )
-
-    ax.axvline(
-        prediction,
-        linestyle="--",
-        linewidth=2,
-        label="Your Prediction"
-    )
-
-    ax.set_title(
-        "YouTube Ad Revenue Distribution"
-    )
-
-    ax.set_xlabel(
-        "Ad Revenue (USD)"
-    )
-
-    ax.set_ylabel(
-        "Number of Videos"
-    )
-
-    ax.legend()
-
-    st.pyplot(fig)
-
-    plt.close(fig)
+    if max_revenue <= 0:
+        max_revenue = max(
+            prediction * 1.5,
+            100
+        )
 
 else:
 
-    st.warning(
-        "⚠️ Revenue column is not available."
+    max_revenue = max(
+        prediction * 1.5,
+        100
     )
 
+gauge_max = max(
+    max_revenue,
+    prediction * 1.2,
+    100
+)
+
+fig_gauge = go.Figure(
+    go.Indicator(
+        mode="gauge+number",
+        value=prediction,
+        title={
+            "text": "Estimated Ad Revenue (USD)"
+        },
+        number={
+            "prefix": "$",
+            "valueformat": ",.2f"
+        },
+        gauge={
+            "axis": {
+                "range": [0, gauge_max]
+            },
+            "bar": {
+                "thickness": 0.7
+            }
+        }
+    )
+)
+
+fig_gauge.update_layout(
+    height=350
+)
+
+st.plotly_chart(
+    fig_gauge,
+    use_container_width=True
+)
+
 # =========================================================
-# VISUALIZATION 2
-# CATEGORY DISTRIBUTION
+# INTERACTIVE DASHBOARD TABS
 # =========================================================
 
-if (
-    not original_df.empty
-    and "category" in original_df.columns
-):
+tab1, tab2, tab3, tab4 = st.tabs(
+    [
+        "💰 Revenue",
+        "🎮 Categories",
+        "👁️ Engagement",
+        "🔥 Correlations"
+    ]
+)
+
+# =========================================================
+# TAB 1 - REVENUE
+# =========================================================
+
+with tab1:
 
     st.subheader(
-        "📊 Video Category Distribution"
+        "💰 Revenue Distribution"
     )
 
-    category_counts = (
-        original_df["category"]
-        .value_counts(normalize=True)
-        * 100
-    )
+    if "ad_revenue_usd" in filtered_df.columns:
 
-    fig2, ax2 = plt.subplots(
-        figsize=(10, 5)
-    )
+        revenue_df = filtered_df[
+            ["ad_revenue_usd"]
+        ].dropna()
 
-    sns.barplot(
-        x=category_counts.index,
-        y=category_counts.values,
-        ax=ax2
-    )
-
-    ax2.set_title(
-        "Video Category Distribution"
-    )
-
-    ax2.set_xlabel(
-        "Category"
-    )
-
-    ax2.set_ylabel(
-        "Percentage (%)"
-    )
-
-    ax2.tick_params(
-        axis="x",
-        rotation=45
-    )
-
-    for i, value in enumerate(
-        category_counts.values
-    ):
-
-        ax2.text(
-            i,
-            value + 0.5,
-            f"{value:.1f}%",
-            ha="center"
+        fig = px.histogram(
+            revenue_df,
+            x="ad_revenue_usd",
+            nbins=50,
+            title="Interactive Revenue Distribution",
+            labels={
+                "ad_revenue_usd":
+                "Ad Revenue (USD)"
+            }
         )
 
-    st.pyplot(fig2)
+        fig.add_vline(
+            x=prediction,
+            line_dash="dash",
+            annotation_text="Your Prediction",
+            annotation_position="top"
+        )
 
-    plt.close(fig2)
+        fig.update_layout(
+            hovermode="x unified"
+        )
+
+        st.plotly_chart(
+            fig,
+            use_container_width=True
+        )
+
+    # -----------------------------------------------------
+    # Revenue by category
+    # -----------------------------------------------------
+
+    if (
+        "category" in filtered_df.columns
+        and "ad_revenue_usd" in filtered_df.columns
+    ):
+
+        category_revenue = (
+            filtered_df
+            .groupby("category")[
+                "ad_revenue_usd"
+            ]
+            .mean()
+            .reset_index()
+            .sort_values(
+                "ad_revenue_usd",
+                ascending=False
+            )
+        )
+
+        fig_cat = px.bar(
+            category_revenue,
+            x="category",
+            y="ad_revenue_usd",
+            title="Average Revenue by Category",
+            labels={
+                "category": "Category",
+                "ad_revenue_usd":
+                "Average Revenue (USD)"
+            },
+            text_auto=".2f"
+        )
+
+        st.plotly_chart(
+            fig_cat,
+            use_container_width=True
+        )
 
 # =========================================================
-# VISUALIZATION 3
-# CORRELATION HEATMAP
+# TAB 2 - CATEGORIES
 # =========================================================
 
-if not original_df.empty:
+with tab2:
+
+    st.subheader(
+        "🎮 Category Analysis"
+    )
+
+    if "category" in filtered_df.columns:
+
+        category_counts = (
+            filtered_df["category"]
+            .value_counts()
+            .reset_index()
+        )
+
+        category_counts.columns = [
+            "category",
+            "count"
+        ]
+
+        fig_category = px.pie(
+            category_counts,
+            names="category",
+            values="count",
+            hole=0.45,
+            title="Video Category Distribution"
+        )
+
+        st.plotly_chart(
+            fig_category,
+            use_container_width=True
+        )
+
+        # Category revenue box plot
+
+        if "ad_revenue_usd" in filtered_df.columns:
+
+            fig_box = px.box(
+                filtered_df,
+                x="category",
+                y="ad_revenue_usd",
+                color="category",
+                title="Revenue Distribution by Category",
+                labels={
+                    "category": "Category",
+                    "ad_revenue_usd":
+                    "Ad Revenue (USD)"
+                }
+            )
+
+            st.plotly_chart(
+                fig_box,
+                use_container_width=True
+            )
+
+# =========================================================
+# TAB 3 - ENGAGEMENT
+# =========================================================
+
+with tab3:
+
+    st.subheader(
+        "👁️ Views vs Revenue"
+    )
+
+    if (
+        "views" in filtered_df.columns
+        and "ad_revenue_usd"
+        in filtered_df.columns
+    ):
+
+        plot_df = filtered_df[
+            [
+                "views",
+                "ad_revenue_usd"
+            ]
+        ].dropna()
+
+        # Limit plotted rows for browser performance
+        if len(plot_df) > 10000:
+            plot_df = plot_df.sample(
+                10000,
+                random_state=42
+            )
+
+        fig_scatter = px.scatter(
+            plot_df,
+            x="views",
+            y="ad_revenue_usd",
+            opacity=0.5,
+            title="Views vs Ad Revenue",
+            labels={
+                "views": "Views",
+                "ad_revenue_usd":
+                "Ad Revenue (USD)"
+            }
+        )
+
+        fig_scatter.add_trace(
+            go.Scatter(
+                x=[views],
+                y=[prediction],
+                mode="markers",
+                marker={
+                    "size": 18,
+                    "symbol": "star"
+                },
+                name="Your Video"
+            )
+        )
+
+        st.plotly_chart(
+            fig_scatter,
+            use_container_width=True
+        )
+
+    # -----------------------------------------------------
+    # Likes vs comments
+    # -----------------------------------------------------
+
+    if (
+        "likes" in filtered_df.columns
+        and "comments" in filtered_df.columns
+    ):
+
+        engagement_df = filtered_df[
+            [
+                "likes",
+                "comments"
+            ]
+        ].dropna()
+
+        if len(engagement_df) > 10000:
+
+            engagement_df = engagement_df.sample(
+                10000,
+                random_state=42
+            )
+
+        fig_engagement = px.scatter(
+            engagement_df,
+            x="likes",
+            y="comments",
+            title="Likes vs Comments",
+            opacity=0.5,
+            labels={
+                "likes": "Likes",
+                "comments": "Comments"
+            }
+        )
+
+        st.plotly_chart(
+            fig_engagement,
+            use_container_width=True
+        )
+
+# =========================================================
+# TAB 4 - CORRELATION
+# =========================================================
+
+with tab4:
 
     st.subheader(
         "🔥 Feature Correlation Heatmap"
     )
 
-    numeric_df = (
-        original_df
-        .select_dtypes(
-            include=np.number
-        )
+    numeric_df = filtered_df.select_dtypes(
+        include=np.number
     )
 
-    if not numeric_df.empty:
+    if numeric_df.shape[1] >= 2:
 
         correlation = numeric_df.corr()
 
-        fig3, ax3 = plt.subplots(
-            figsize=(12, 8)
-        )
-
-        sns.heatmap(
+        fig_heatmap = px.imshow(
             correlation,
-            annot=True,
-            fmt=".2f",
-            ax=ax3
+            text_auto=".2f",
+            aspect="auto",
+            title="Interactive Feature Correlation"
         )
 
-        ax3.set_title(
-            "Feature Correlation Heatmap"
+        st.plotly_chart(
+            fig_heatmap,
+            use_container_width=True
         )
 
-        st.pyplot(fig3)
+    else:
 
-        plt.close(fig3)
+        st.warning(
+            "Not enough numeric columns for correlation analysis."
+        )
 
 # =========================================================
-# VISUALIZATION 4
-# VIEWS VS REVENUE
+# DEVICE ANALYSIS
 # =========================================================
 
 if (
-    not original_df.empty
-    and "views" in original_df.columns
-    and "ad_revenue_usd" in original_df.columns
+    "device" in filtered_df.columns
+    and "ad_revenue_usd" in filtered_df.columns
 ):
 
-    st.subheader(
-        "👁️ Views vs Ad Revenue"
+    st.header("📱 Device Analysis")
+
+    device_revenue = (
+        filtered_df
+        .groupby("device")["ad_revenue_usd"]
+        .mean()
+        .reset_index()
     )
 
-    fig4, ax4 = plt.subplots(
-        figsize=(10, 5)
+    fig_device = px.bar(
+        device_revenue,
+        x="device",
+        y="ad_revenue_usd",
+        color="device",
+        title="Average Revenue by Device",
+        labels={
+            "device": "Device",
+            "ad_revenue_usd":
+            "Average Revenue (USD)"
+        },
+        text_auto=".2f"
     )
 
-    ax4.scatter(
-        original_df["views"],
-        original_df["ad_revenue_usd"],
-        alpha=0.3
+    st.plotly_chart(
+        fig_device,
+        use_container_width=True
     )
 
-    ax4.scatter(
-        views,
-        prediction,
-        s=100,
-        marker="*",
-        label="Your Video"
+# =========================================================
+# COUNTRY ANALYSIS
+# =========================================================
+
+if (
+    "country" in filtered_df.columns
+    and "ad_revenue_usd" in filtered_df.columns
+):
+
+    st.header("🌎 Country Analysis")
+
+    country_revenue = (
+        filtered_df
+        .groupby("country")["ad_revenue_usd"]
+        .mean()
+        .reset_index()
+        .sort_values(
+            "ad_revenue_usd",
+            ascending=False
+        )
     )
 
-    ax4.set_title(
-        "Views vs Ad Revenue"
+    fig_country = px.bar(
+        country_revenue,
+        x="country",
+        y="ad_revenue_usd",
+        color="country",
+        title="Average Revenue by Country",
+        labels={
+            "country": "Country",
+            "ad_revenue_usd":
+            "Average Revenue (USD)"
+        },
+        text_auto=".2f"
     )
 
-    ax4.set_xlabel(
-        "Views"
+    st.plotly_chart(
+        fig_country,
+        use_container_width=True
     )
-
-    ax4.set_ylabel(
-        "Ad Revenue (USD)"
-    )
-
-    ax4.legend()
-
-    st.pyplot(fig4)
-
-    plt.close(fig4)
 
 # =========================================================
 # DATASET INFORMATION
 # =========================================================
 
-if not original_df.empty:
+st.header("📋 Dataset Information")
 
-    st.header(
-        "📋 Dataset Information"
+d1, d2, d3, d4 = st.columns(4)
+
+with d1:
+    st.metric(
+        "Rows",
+        f"{len(filtered_df):,}"
     )
 
-    col1, col2, col3, col4 = st.columns(4)
+with d2:
+    st.metric(
+        "Columns",
+        len(filtered_df.columns)
+    )
 
-    with col1:
-
-        st.metric(
-            "📊 Rows",
-            f"{original_df.shape[0]:,}"
+with d3:
+    st.metric(
+        "Missing Values",
+        int(
+            filtered_df
+            .isnull()
+            .sum()
+            .sum()
         )
+    )
 
-    with col2:
-
-        st.metric(
-            "📁 Columns",
-            original_df.shape[1]
-        )
-
-    with col3:
-
-        st.metric(
-            "❗ Missing Values",
-            int(
-                original_df
-                .isnull()
-                .sum()
-                .sum()
-            )
-        )
-
-    with col4:
-
-        st.metric(
-            "💾 Dataset Size",
-            f"{os.path.getsize(DATA_FILE) / (1024 * 1024):.2f} MB"
-        )
+with d4:
+    st.metric(
+        "Dataset Size",
+        f"{os.path.getsize(DATA_FILE) / (1024 * 1024):.2f} MB"
+    )
 
 # =========================================================
 # DATA PREVIEW
 # =========================================================
 
-if not original_df.empty:
+with st.expander("🔍 View Dataset"):
 
-    with st.expander(
-        "🔍 View Dataset Preview"
-    ):
-
-        st.dataframe(
-            original_df.head(10),
-            use_container_width=True
-        )
+    st.dataframe(
+        filtered_df.head(100),
+        use_container_width=True
+    )
 
 # =========================================================
 # FOOTER
 # =========================================================
 
-st.write("---")
+st.divider()
 
 st.caption(
-    "⚠️ This application provides an estimated "
-    "YouTube ad revenue prediction. Actual revenue "
-    "may vary depending on multiple factors."
+    "⚠️ This application provides an estimated YouTube "
+    "ad revenue prediction. Actual revenue may vary."
 )
