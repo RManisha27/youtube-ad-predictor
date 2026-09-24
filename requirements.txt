@@ -4,4 +4,5 @@ numpy
 scikit-learn==1.6.1
 matplotlib
 seaborn
+plotly
 joblib==1.4.2
